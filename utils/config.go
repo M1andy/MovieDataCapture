@@ -6,14 +6,23 @@ import (
 	"path"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/ini.v1"
 )
 
-var loadConfigOptions = ini.LoadOptions{
-	IgnoreInlineComment: true,
-}
+var (
+	logger            = logrus.New()
+	loadConfigOptions = ini.LoadOptions{
+		IgnoreInlineComment: true}
+)
 
 // config里位于common分区里的设置
+type Config struct {
+	Common        commonConfig
+	AdvancedSleep advancedSleepConfig
+	Proxy         proxyConfig
+	Logger        loggerCfg
+}
 type commonConfig struct {
 	MainMode                 int    `ini:"main_mode"`
 	SourceFolder             string `ini:"source_folder"`
@@ -49,10 +58,9 @@ type proxyConfig struct {
 	CacertFile  string `ini:"cacert_file"`
 }
 
-type Config struct {
-	Common        commonConfig
-	AdvancedSleep advancedSleepConfig
-	Proxy         proxyConfig
+type loggerCfg struct {
+	logLevel string `ini:log_level`
+	logPath  string `ini:"log_path"`
 }
 
 func PathExists(path string) (bool, error) {
@@ -131,5 +139,50 @@ func LoadConfig() (*Config, error) {
 
 }
 
+func setLogger(env string, cfg *loggerCfg) {
+	// 预留未来构建桌面应用的对应参数
+	// TODO 添加默认获取proxy的信息
+	if env == "desktop" {
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	} else {
+		logger.SetFormatter(&logrus.TextFormatter{})
+	}
+
+	// 终端默认设置
+	// 设置等级
+	switch cfg.logLevel {
+	case "info":
+		logger.SetLevel(logrus.InfoLevel)
+	case "debug":
+		logger.SetLevel(logrus.InfoLevel)
+	case "error":
+		logger.SetLevel(logrus.InfoLevel)
+	default:
+		logger.SetLevel(logrus.DebugLevel)
+	}
+
+	// 设置输出
+	logger.SetOutput(os.Stdout)
+
+	// 设置默认fields
+
+	// 检测log目录是否存在，不存在则创建
+	if ok, err := PathExists(cfg.logPath); err != nil {
+		logger.Error(err)
+		if !ok {
+			err = os.Mkdir(cfg.logPath, os.FileMode(0666))
+			logger.Error(err)
+		}
+	}
+
+	// TODO 添加生成文件log的hook
+
+}
+
 func init() {
+	allCfg, err := LoadConfig()
+	if err != nil {
+		fmt.Printf("loading config error: %v\n", err)
+	}
+	setLogger("terminal", &allCfg.Logger)
 }
